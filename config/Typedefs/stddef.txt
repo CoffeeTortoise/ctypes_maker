@@ -1,0 +1,6 @@
+'size_t'='unsigned long long';
+'ptrdiff_t'='long';
+'intptr_t'='long';
+'uintptr_t'='unsigned long';
+'_Bool'='int';
+'byte'='unsigned char';

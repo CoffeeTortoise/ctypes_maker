@@ -1,0 +1,4 @@
+_SECIMP;
+__force;
+_NODISCARD;
+__CRTDECL;

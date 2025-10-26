@@ -1,0 +1,5 @@
+visual_studio.txt;
+standard.txt;
+csfml.txt;
+other.txt;
+mingw.txt;
