@@ -11,8 +11,9 @@ from parse import parse
 def create_ctypes(config_folder, in_file, out_file):
 	text = get_text(in_file, config_folder)
 	with io.open(out_file, 'w', encoding=CODING) as f:
+		res = '\n'.join(r for r in parse(text) if r)
 		f.write(
-			'\n'.join(r for r in parse(text) if r)
+			unicode(res, encoding=CODING) if type(res) is str else res
 		)
 	print 'ctypes wrapper for %s created at %s!' % (in_file, out_file)
 

@@ -12,9 +12,7 @@ def parse_array(line):
 	type_name = line[:ind].strip()
 	ind = type_name.rfind(' ')
 	type_, name = type_name[:ind].strip(), type_name[ind + 1:].strip()
-	if type_ not in TYPES_TABLE:
-		return None
-	ctype = TYPES_TABLE[type_]
+	ctype = type_ if type_ not in TYPES_TABLE else TYPES_TABLE[type_]
 	dims = (
 		line
 		.replace(type_name, '')
@@ -37,9 +35,7 @@ def parse_pointer(line):
 	ind = line.rfind(' ')
 	type_, name = line[:ind].strip(), line[ind + 1:].strip()
 	true_type = 'void*' if 'void*' in type_ else type_.replace('*', '').strip()
-	if true_type not in TYPES_TABLE:
-		return None
-	ctype = TYPES_TABLE[true_type]
+	ctype = true_type if true_type not in TYPES_TABLE else TYPES_TABLE[true_type]
 	star_cnt = type_.replace(true_type, '').count('*')
 	while star_cnt > 0:
 		ctype = 'ctypes.POINTER(%s)' % ctype
@@ -56,9 +52,8 @@ def parse_var(line):
 		return parse_pointer(line.replace('&', '*'))
 	ind = line.rfind(' ')
 	type_, name = line[:ind].strip(), line[ind + 1:].strip()
-	if type_ not in TYPES_TABLE:
-		return None
-	return name, TYPES_TABLE[type_]
+	ctype = type_ if type_ not in TYPES_TABLE else TYPES_TABLE[type_]
+	return name, ctype
 
 
 def parse_macro(line):
@@ -134,6 +129,53 @@ def parse_union(lines, j):
 	return j, structure.replace('union', '').replace('ctypes.Structure', 'ctypes.Union').strip()
 
 
+def parse_func_args(func_args):
+	for arg in func_args.replace('(', '').replace(')', '').split(','):
+		if not arg:
+			continue
+		yield parse_var(arg)
+
+
+def create_func_doc(res_type, arg_name_type):
+	return '\n\t'.join(
+		[
+			'\t\'\'\'\n\tArgs:',
+			'\t' + '\n\t\t'.join('%s: %s' % (name, type_) for name, type_ in arg_name_type.items()),
+			'Returns:\n\t\t%s' % res_type,
+			'\'\'\''
+		]
+	)
+
+
+def create_func(name, res_type, arg_name_type):
+	argtypes = ', '.join(arg_name_type.values())
+	argnames = ', '.join(arg_name_type.keys())
+	return '\n'.join(
+		[
+			'DLL_NAME.%s.restype = %s' % (name, res_type),
+			'DLL_NAME.%s.argtypes = [%s]\n' % (name, argtypes),
+			'def %s(%s):\t' % (name, argnames),
+			create_func_doc(res_type, arg_name_type),
+			'\treturn DLL_NAME.%s(%s)\n\n' % (name, argnames)
+		]
+	)
+
+
+def parse_func(line):
+	cnt_o, cnt_c = line.count('('), line.count(')')
+	if cnt_o != cnt_c:
+		return None
+	ind = line.rfind('(')
+	type_name, args = line[:ind].strip(), line[ind:].strip()
+	ind = type_name.rfind(' ')
+	type_, name = type_name[:ind].strip(), type_name[ind + 1:].strip()
+	if not name:
+		return None
+	_, res_type = parse_var('%s dummy' % type_)
+	arg_name_type = {name: type_ for name, type_ in parse_func_args(args)}
+	return create_func(name, res_type, arg_name_type)
+
+
 def parse(text):
 	lines = [l for l in text.split(ENDL) if l]
 	j = 0
@@ -147,6 +189,8 @@ def parse(text):
 			numerator = 0
 			while j < len(lines) and not ('}' in l and ';' in l):
 				j += 1
+				if j >= len(lines):
+					break
 				numerator, res = parse_enum_var(l, numerator)
 				yield res
 				l = format_text_line(lines[j])
@@ -156,4 +200,17 @@ def parse(text):
 		elif 'union' in l:
 			j, res = parse_union(lines, j)
 			yield res
+		elif '(' in l and ')' in l and l.endswith(';'):
+			yield parse_func(l[:-1])
+		elif '(' in l:
+			buf = [l]
+			while j < len(lines) and not ';' in l:
+				j += 1
+				if j >= len(lines):
+					break
+				l = format_text_line(lines[j])
+				buf.append(l)
+			yield parse_func(
+				''.join(c.strip() for c in buf if c)[:-1]
+			)
 		j += 1
